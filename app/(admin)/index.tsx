@@ -97,7 +97,10 @@ export default function AdminIndexScreen() {
           <Text style={styles.greeting}>Administration</Text>
           <Text style={styles.subtitle}>Tableau de bord</Text>
         </View>
-        <Pressable onPress={signOut} style={styles.logoutBtn}>
+        <Pressable onPress={async () => {
+          try { await signOut(); } catch {}
+          router.replace('/(driver)');
+        }} style={styles.logoutBtn}>
           <LogOut size={22} color={Colors.error} />
         </Pressable>
       </View>

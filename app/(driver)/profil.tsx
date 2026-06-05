@@ -1,6 +1,6 @@
 import {
   View, Text, TextInput, Pressable, StyleSheet,
-  ScrollView, Alert, Switch,
+  ScrollView, Switch,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,11 +40,9 @@ export default function DriverProfilScreen() {
     }
   };
 
-  const handleSignOut = () => {
-    Alert.alert('Déconnexion', 'Voulez-vous vous déconnecter ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Déconnexion', style: 'destructive', onPress: async () => { await signOut(); } },
-    ]);
+  const handleSignOut = async () => {
+    try { await signOut(); } catch {}
+    router.replace('/(driver)');
   };
 
   return (

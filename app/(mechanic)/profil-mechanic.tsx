@@ -63,7 +63,10 @@ export default function MechanicProfilScreen() {
           <ArrowLeft size={22} color={Colors.text} />
         </Pressable>
         <Text style={styles.title}>Mon profil</Text>
-        <Pressable onPress={signOut} style={styles.logoutBtn}>
+        <Pressable onPress={async () => {
+          try { await signOut(); } catch {}
+          router.replace('/(driver)');
+        }} style={styles.logoutBtn}>
           <LogOut size={20} color={Colors.error} />
         </Pressable>
       </View>
