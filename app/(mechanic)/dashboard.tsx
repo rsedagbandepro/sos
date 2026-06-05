@@ -1,509 +1,200 @@
 import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
+  View, Text, Pressable, StyleSheet, ScrollView, RefreshControl,
+  Switch, ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MapPin, Wrench, History, User, Bell } from 'lucide-react-native';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useNearbyOpenPannes } from '@/hooks/usePannes';
 import { supabase } from '@/lib/supabase';
 import { getCurrentPosition } from '@/lib/location';
-import { OfflineBanner } from '@/components/OfflineBanner';
-import { useConnectivity } from '@/hooks/useConnectivity';
-import { MapPin, Clock, Phone, Wrench, Battery, CircleDot, Truck, KeyRound, Circle as HelpCircle, CircleCheck as CheckCircle, Circle as XCircle, Navigation, Eye, History, User } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import type { BreakdownRequest, BreakdownType, Mechanic } from '@/lib/types';
-import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-
-const BREAKDOWN_ICONS: Record<BreakdownType, typeof Wrench> = {
-  flat_tire: CircleDot,
-  dead_battery: Battery,
-  engine_failure: Wrench,
-  towing: Truck,
-  locked_out: KeyRound,
-  other: HelpCircle,
-};
-
-const BREAKDOWN_COLORS: Record<BreakdownType, string> = {
-  flat_tire: Colors.primary,
-  dead_battery: Colors.secondaryLight,
-  engine_failure: Colors.accentDark,
-  towing: Colors.success,
-  locked_out: Colors.warning,
-  other: Colors.textTertiary,
-};
-
-const BREAKDOWN_LABELS: Record<string, string> = {
-  flat_tire: 'Crevaison',
-  dead_battery: 'Batterie à plat',
-  engine_failure: 'Panne moteur',
-  towing: 'Remorquage',
-  locked_out: 'Clés perdues',
-  other: 'Autre',
-};
+import { PanneCard } from '@/components/PanneCard';
+import { useState, useEffect, useCallback } from 'react';
+import type { Mechanic } from '@/lib/types';
 
 export default function MechanicDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { isOnline } = useConnectivity();
   const [mechanic, setMechanic] = useState<Mechanic | null>(null);
-  const [pendingRequests, setPendingRequests] = useState<BreakdownRequest[]>([]);
-  const [activeRequest, setActiveRequest] = useState<BreakdownRequest | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMechanic, setLoadingMechanic] = useState(true);
+  const [toggling, setToggling] = useState(false);
 
-  // Load mechanic profile
-  useEffect(() => {
-    if (!user) {
-      router.replace('/(mechanic)/login');
-      return;
-    }
+  const lat = mechanic?.latitude ?? 0;
+  const lng = mechanic?.longitude ?? 0;
+  const radius = mechanic?.intervention_radius_km ?? 30;
+  const { pannes, loading: loadingPannes, refetch: refresh } = useNearbyOpenPannes(
+    lat, lng, radius
+  );
 
-    supabase
+  const loadMechanic = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
       .from('mechanics')
       .select('*')
       .eq('user_id', user.id)
-      .maybeSingle()
-      .then(async ({ data }) => {
-        if (!data) {
-          router.replace('/(mechanic)/register');
-          return;
-        }
-        setMechanic(data as Mechanic);
+      .maybeSingle();
 
-        // Refresh mechanic location on dashboard load
-        try {
-          const coords = await getCurrentPosition();
-          await supabase
-            .from('mechanics')
-            .update({ latitude: coords.latitude, longitude: coords.longitude })
-            .eq('id', data.id);
-        } catch {
-          // Location update is non-critical
-        }
-      });
+    if (!data) {
+      router.replace('/(mechanic)/onboarding');
+      return;
+    }
+    if (data.verification_status !== 'approved') {
+      router.replace('/(mechanic)/onboarding');
+      return;
+    }
+    setMechanic(data as Mechanic);
+    setLoadingMechanic(false);
+
+    // Update GPS silently
+    try {
+      const coords = await getCurrentPosition();
+      await supabase.from('mechanics').update({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      }).eq('id', data.id);
+    } catch {
+      // non-critical
+    }
   }, [user]);
 
-  // Fetch pending requests
-  const fetchRequests = useCallback(async () => {
-    if (!mechanic) return;
-
-    try {
-      // Fetch pending requests near mechanic's location
-      const { data: pending } = await supabase
-        .from('breakdown_requests')
-        .select('*')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      setPendingRequests((pending as BreakdownRequest[]) || []);
-
-      // Fetch own active request
-      const { data: active } = await supabase
-        .from('breakdown_requests')
-        .select('*')
-        .eq('accepted_by', mechanic.id)
-        .in('status', ['accepted', 'in_progress'])
-        .order('created_at', { ascending: false })
-        .maybeSingle();
-
-      setActiveRequest((active as BreakdownRequest) || null);
-    } catch {
-      // Silent failure
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [mechanic]);
-
   useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
+    loadMechanic();
+  }, [loadMechanic]);
 
-  // Realtime subscription for new requests
-  useEffect(() => {
-    if (!mechanic) return;
-
-    const channel = supabase
-      .channel('mechanic_dashboard')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'breakdown_requests',
-          filter: 'status=eq.pending',
-        },
-        (payload: RealtimePostgresChangesPayload<BreakdownRequest>) => {
-          if (payload.new) {
-            setPendingRequests((prev) => [
-              payload.new as BreakdownRequest,
-              ...prev,
-            ]);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [mechanic]);
-
-  const handleAccept = async (requestId: string) => {
-    if (!mechanic) return;
-    try {
-      const { error } = await supabase
-        .from('breakdown_requests')
-        .update({ status: 'accepted', accepted_by: mechanic.id })
-        .eq('id', requestId);
-
-      if (error) throw error;
-
-      setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
-      router.push(`/(mechanic)/active-request?requestId=${requestId}`);
-    } catch {
-      // Show error inline
-    }
+  const toggleAvailability = async () => {
+    if (!mechanic || toggling) return;
+    setToggling(true);
+    const next = !mechanic.is_available;
+    await supabase.from('mechanics').update({ is_available: next }).eq('id', mechanic.id);
+    setMechanic(prev => prev ? { ...prev, is_available: next } : prev);
+    setToggling(false);
   };
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchRequests();
-  };
-
-  if (loading) {
+  if (loadingMechanic) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.center}>
         <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Chargement des demandes...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {!isOnline && (
-        <View style={styles.bannerWrapper}>
-          <OfflineBanner visible={!isOnline} />
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
+        <View>
+          <Text style={styles.greeting}>Bonjour,</Text>
+          <Text style={styles.name}>{mechanic?.business_name || 'Mécanicien'}</Text>
         </View>
-      )}
-
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
-        <Text style={styles.title}>Demandes</Text>
-        <View style={styles.headerActions}>
-          <View style={styles.availabilityRow}>
-            <View
-              style={[
-                styles.availabilityDot,
-                mechanic?.is_available
-                  ? styles.availableDot
-                  : styles.unavailableDot,
-              ]}
+        <View style={styles.headerRight}>
+          <View style={styles.availRow}>
+            <View style={[styles.dot, mechanic?.is_available ? styles.dotOn : styles.dotOff]} />
+            <Switch
+              value={mechanic?.is_available ?? false}
+              onValueChange={toggleAvailability}
+              trackColor={{ false: Colors.border, true: Colors.success + '80' }}
+              thumbColor={mechanic?.is_available ? Colors.success : Colors.textTertiary}
+              disabled={toggling}
             />
-            <Text style={styles.availabilityText}>
-              {mechanic?.is_available ? 'Disponible' : 'Indisponible'}
-            </Text>
           </View>
-          <View style={styles.headerNav}>
-            <Pressable onPress={() => router.push('/(mechanic)/history')} style={styles.navButton}>
-              <History size={22} color={Colors.textSecondary} />
-            </Pressable>
-            <Pressable onPress={() => router.push('/(mechanic)/profile')} style={styles.navButton}>
-              <User size={22} color={Colors.textSecondary} />
-            </Pressable>
-          </View>
+          <Pressable onPress={() => router.push('/(mechanic)/profil-mechanic')} style={styles.iconBtn}>
+            <User size={22} color={Colors.textSecondary} />
+          </Pressable>
         </View>
       </View>
 
+      <View style={styles.statsRow}>
+        <Pressable style={styles.statCard} onPress={() => router.push('/(mechanic)/interventions')}>
+          <History size={20} color={Colors.primary} />
+          <Text style={styles.statLabel}>Interventions</Text>
+        </Pressable>
+        <View style={styles.statCard}>
+          <MapPin size={20} color={Colors.accent} />
+          <Text style={styles.statLabel}>{radius} km</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: mechanic?.is_available ? Colors.successLight : Colors.surfaceDark }]}>
+          <Bell size={20} color={mechanic?.is_available ? Colors.success : Colors.textTertiary} />
+          <Text style={styles.statLabel}>{mechanic?.is_available ? 'Actif' : 'Inactif'}</Text>
+        </View>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Wrench size={18} color={Colors.primary} />
+        <Text style={styles.sectionTitle}>Pannes à proximité</Text>
+        {loadingPannes && <ActivityIndicator size="small" color={Colors.primary} />}
+      </View>
+
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
+          <RefreshControl refreshing={loadingPannes} onRefresh={refresh} tintColor={Colors.primary} />
         }
       >
-        {activeRequest && (
-          <Pressable
-            style={styles.activeCard}
-            onPress={() =>
-              router.push(`/(mechanic)/active-request?requestId=${activeRequest.id}`)
-            }
-          >
-            <View style={styles.activeCardHeader}>
-              <Navigation size={20} color={Colors.accent} />
-              <Text style={styles.activeCardTitle}>Demande active</Text>
-            </View>
-            <Text style={styles.activeCardType}>
-              {BREAKDOWN_LABELS[activeRequest.breakdown_type] || activeRequest.breakdown_type}
-            </Text>
-            <View style={styles.activeCardMeta}>
-              <Phone size={14} color={Colors.textSecondary} />
-              <Text style={styles.activeCardMetaText}>{activeRequest.driver_phone}</Text>
-            </View>
-          </Pressable>
-        )}
-
-        <Text style={styles.sectionTitle}>
-          Nouvelles demandes ({pendingRequests.length})
-        </Text>
-
-        {pendingRequests.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Clock size={48} color={Colors.textTertiary} />
-            <Text style={styles.emptyText}>
-              Aucune demande en attente pour le moment
+        {!mechanic?.is_available && (
+          <View style={styles.inactiveNotice}>
+            <Text style={styles.inactiveText}>
+              Vous etes hors ligne. Activez votre disponibilité pour voir les pannes.
             </Text>
           </View>
-        ) : (
-          pendingRequests.map((req) => {
-            const Icon = BREAKDOWN_ICONS[req.breakdown_type] || HelpCircle;
-            const color = BREAKDOWN_COLORS[req.breakdown_type] || Colors.textTertiary;
-
-            return (
-              <View key={req.id} style={styles.requestCard}>
-                <View style={styles.requestHeader}>
-                  <View style={[styles.typeBadge, { backgroundColor: color + '15' }]}>
-                    <Icon size={20} color={color} />
-                  </View>
-                  <View style={styles.requestInfo}>
-                    <Text style={styles.requestType}>
-                      {BREAKDOWN_LABELS[req.breakdown_type] || req.breakdown_type}
-                    </Text>
-                    <View style={styles.requestMeta}>
-                      <Clock size={12} color={Colors.textTertiary} />
-                      <Text style={styles.requestMetaText}>
-                        {new Date(req.created_at).toLocaleTimeString('fr-FR', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </Text>
-                      <MapPin size={12} color={Colors.textTertiary} />
-                      <Text style={styles.requestMetaText}>
-                        {req.driver_phone}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {req.description ? (
-                  <Text style={styles.requestDescription} numberOfLines={2}>
-                    {req.description}
-                  </Text>
-                ) : null}
-
-                <View style={styles.requestActions}>
-                  <Pressable
-                    style={styles.acceptButton}
-                    onPress={() => handleAccept(req.id)}
-                  >
-                    <CheckCircle size={18} color={Colors.textInverse} />
-                    <Text style={styles.acceptButtonText}>Accepter</Text>
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })
         )}
+
+        {mechanic?.is_available && pannes.length === 0 && !loadingPannes && (
+          <View style={styles.empty}>
+            <MapPin size={48} color={Colors.textTertiary} />
+            <Text style={styles.emptyTitle}>Aucune panne à proximité</Text>
+            <Text style={styles.emptyDesc}>Les nouvelles demandes apparaitront ici en temps réel.</Text>
+          </View>
+        )}
+
+        {mechanic?.is_available && pannes.map(panne => (
+          <PanneCard
+            key={panne.id}
+            panne={panne}
+            onPress={() => router.push(`/(mechanic)/panne/${panne.id}`)}
+          />
+        ))}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  bannerWrapper: {
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.md,
-    backgroundColor: Colors.background,
-  },
-  loadingText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeSm,
-    color: Colors.textSecondary,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
   header: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md,
   },
-  title: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeXxl,
-    color: Colors.text,
+  greeting: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.textSecondary },
+  name: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeXl, color: Colors.text },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  availRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotOn: { backgroundColor: Colors.success },
+  dotOff: { backgroundColor: Colors.textTertiary },
+  iconBtn: { padding: Spacing.sm },
+  statsRow: {
+    flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg, marginBottom: Spacing.lg,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
+  statCard: {
+    flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md,
+    alignItems: 'center', gap: Spacing.xs, borderWidth: 1, borderColor: Colors.border,
   },
-  headerNav: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
+  statLabel: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeXs, color: Colors.textSecondary },
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm,
   },
-  navButton: {
-    padding: Spacing.sm,
-    borderRadius: BorderRadius.md,
+  sectionTitle: { flex: 1, fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeLg, color: Colors.text },
+  scroll: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl, gap: Spacing.md },
+  inactiveNotice: {
+    backgroundColor: Colors.warningLight, borderWidth: 1, borderColor: Colors.warning,
+    borderRadius: BorderRadius.lg, padding: Spacing.md,
   },
-  availabilityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  availabilityDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  availableDot: {
-    backgroundColor: Colors.success,
-  },
-  unavailableDot: {
-    backgroundColor: Colors.textTertiary,
-  },
-  availabilityText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeSm,
-    color: Colors.textSecondary,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
-    gap: Spacing.md,
-  },
-  activeCard: {
-    backgroundColor: Colors.accentLight + '40',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.accent,
-    gap: Spacing.sm,
-  },
-  activeCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  activeCardTitle: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeSm,
-    color: Colors.accentDark,
-  },
-  activeCardType: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeMd,
-    color: Colors.text,
-  },
-  activeCardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  activeCardMetaText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeSm,
-    color: Colors.textSecondary,
-  },
-  sectionTitle: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeLg,
-    color: Colors.text,
-  },
-  emptyState: {
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.xxl,
-  },
-  emptyText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeMd,
-    color: Colors.textTertiary,
-    textAlign: 'center',
-  },
-  requestCard: {
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: Spacing.md,
-    elevation: 1,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  requestHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  typeBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  requestInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  requestType: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeMd,
-    color: Colors.text,
-  },
-  requestMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  requestMetaText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeXs,
-    color: Colors.textTertiary,
-  },
-  requestDescription: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeSm,
-    color: Colors.textSecondary,
-    lineHeight: Typography.fontSizeSm * Typography.lineHeightBody,
-  },
-  requestActions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  acceptButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.success,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-  },
-  acceptButtonText: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeSm,
-    color: Colors.textInverse,
-  },
+  inactiveText: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.text, textAlign: 'center' },
+  empty: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xxl },
+  emptyTitle: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeMd, color: Colors.text },
+  emptyDesc: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.textTertiary, textAlign: 'center' },
 });

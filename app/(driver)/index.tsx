@@ -1,130 +1,98 @@
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { History, User, LogIn, ChevronRight } from 'lucide-react-native';
 import { SOSButton } from '@/components/SOSButton';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { PanneCard } from '@/components/PanneCard';
 import { useConnectivity } from '@/hooks/useConnectivity';
-import { useDriverRequests } from '@/hooks/useBreakdownRequest';
+import { useAuth } from '@/hooks/useAuth';
+import { useDriverPannes } from '@/hooks/usePannes';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
-import { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Clock, MapPin, ChevronRight } from 'lucide-react-native';
-import type { BreakdownRequest } from '@/lib/types';
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'En attente',
-  accepted: 'Mécanicien trouvé',
-  in_progress: 'En route',
-  resolved: 'Résolu',
-  cancelled: 'Annulé',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: Colors.warning,
-  accepted: Colors.secondaryLight,
-  in_progress: Colors.accent,
-  resolved: Colors.success,
-  cancelled: Colors.textTertiary,
-};
+import type { Panne } from '@/lib/types';
 
 export default function DriverHome() {
+  const insets = useSafeAreaInsets();
   const { isOnline } = useConnectivity();
-  const [driverPhone, setDriverPhone] = useState<string | null>(null);
-  const { requests, loading } = useDriverRequests(driverPhone || '');
+  const { user, profile } = useAuth();
+  const { pannes, loading } = useDriverPannes(user?.id ?? null);
 
-  useEffect(() => {
-    AsyncStorage.getItem('sos_panne_driver_phone').then((phone) => {
-      if (phone) setDriverPhone(phone);
-    });
-  }, []);
-
-  const activeRequests = requests.filter(
-    (r: BreakdownRequest) =>
-      r.status === 'pending' || r.status === 'accepted' || r.status === 'in_progress'
+  const activePannes = pannes.filter(
+    (p: Panne) => p.statut === 'ouverte' || p.statut === 'offre_acceptee' || p.statut === 'en_cours'
   );
 
-  const handleSOSPress = () => {
-    router.push('/(driver)/breakdown-type');
+  const handlePannePress = (p: Panne) => {
+    if (p.statut === 'ouverte' || p.statut === 'offre_acceptee') {
+      router.push(`/(driver)/attente/${p.id}`);
+    } else if (p.statut === 'en_cours') {
+      router.push(`/(driver)/suivi/${p.id}`);
+    }
   };
 
-  const handleRequestPress = (requestId: string) => {
-    router.push(`/(driver)/request-sent?requestId=${requestId}`);
-  };
+  const isGuest = !user;
+  const firstName = profile?.full_name?.split(' ')[0] ?? null;
 
   return (
     <View style={styles.container}>
       {!isOnline && (
         <View style={styles.bannerWrapper}>
-          <OfflineBanner visible={!isOnline} />
+          <OfflineBanner visible />
         </View>
       )}
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Text style={styles.greeting}>Besoin d'aide ?</Text>
-          <Text style={styles.subtitle}>
-            Appuyez sur le bouton SOS pour signaler votre panne
-          </Text>
-        </View>
-
-        <View style={styles.sosContainer}>
-          <SOSButton onPress={handleSOSPress} />
-        </View>
-
-        {activeRequests.length > 0 && (
-          <View style={styles.requestsSection}>
-            <Text style={styles.sectionTitle}>Demandes en cours</Text>
-            {activeRequests.map((req: BreakdownRequest) => (
-              <Pressable
-                key={req.id}
-                style={styles.requestCard}
-                onPress={() => handleRequestPress(req.id)}
-              >
-                <View style={styles.requestInfo}>
-                  <View style={styles.requestHeader}>
-                    <View
-                      style={[
-                        styles.statusDot,
-                        { backgroundColor: STATUS_COLORS[req.status] || Colors.textTertiary },
-                      ]}
-                    />
-                    <Text style={styles.requestStatus}>
-                      {STATUS_LABELS[req.status] || req.status}
-                    </Text>
-                  </View>
-                  <View style={styles.requestMeta}>
-                    <Clock size={14} color={Colors.textTertiary} />
-                    <Text style={styles.requestMetaText}>
-                      {new Date(req.created_at).toLocaleTimeString('fr-FR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Text>
-                    <MapPin size={14} color={Colors.textTertiary} />
-                    <Text style={styles.requestMetaText}>
-                      {req.latitude.toFixed(4)}, {req.longitude.toFixed(4)}
-                    </Text>
-                  </View>
-                </View>
-                <ChevronRight size={20} color={Colors.textTertiary} />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
+          <View>
+            <Text style={styles.greeting}>
+              {isGuest ? 'Bonjour !' : `Bonjour${firstName ? ', ' + firstName : ''}`}
+            </Text>
+            <Text style={styles.subtitle}>Prêt à vous aider en cas de panne</Text>
+          </View>
+          <View style={styles.headerActions}>
+            {!isGuest && (
+              <Pressable style={styles.iconBtn} onPress={() => router.push('/(driver)/mes-pannes')}>
+                <History size={22} color={Colors.textSecondary} />
               </Pressable>
+            )}
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => router.push(isGuest ? '/(auth)/login' : '/(driver)/profil')}
+            >
+              {isGuest
+                ? <LogIn size={22} color={Colors.primary} />
+                : <User size={22} color={Colors.textSecondary} />
+              }
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.sosSection}>
+          <SOSButton onPress={() => router.push('/(driver)/nouvelle-panne')} />
+          <Text style={styles.sosHint}>Appuyez en cas de panne</Text>
+        </View>
+
+        {isGuest && (
+          <Pressable style={styles.guestBanner} onPress={() => router.push('/(auth)/login')}>
+            <View style={styles.guestBannerText}>
+              <Text style={styles.guestTitle}>Suivre vos pannes</Text>
+              <Text style={styles.guestDesc}>Créez un compte gratuit pour retrouver l'historique de vos pannes.</Text>
+            </View>
+            <ChevronRight size={20} color={Colors.primary} />
+          </Pressable>
+        )}
+
+        {!isGuest && activePannes.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Pannes en cours ({activePannes.length})</Text>
+            {activePannes.map((p: Panne) => (
+              <PanneCard key={p.id} panne={p} onPress={() => handlePannePress(p)} />
             ))}
           </View>
         )}
 
-        {driverPhone && activeRequests.length === 0 && !loading && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>
-              Aucune demande en cours. Appuyez sur SOS si vous êtes en panne.
-            </Text>
+        {!isGuest && !loading && activePannes.length === 0 && (
+          <View style={styles.emptyHint}>
+            <Text style={styles.emptyText}>Aucune panne en cours. Appuyez sur SOS si besoin.</Text>
           </View>
         )}
       </ScrollView>
@@ -133,102 +101,30 @@ export default function DriverHome() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  bannerWrapper: {
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
-  },
-  scrollContent: {
-    paddingBottom: Spacing.xxl,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  bannerWrapper: { paddingHorizontal: Spacing.md, paddingTop: Spacing.md },
+  scroll: { paddingBottom: Spacing.xxl },
   header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xxxl,
-    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  greeting: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeXxl,
-    color: Colors.text,
-    lineHeight: Typography.fontSizeXxl * Typography.lineHeightHeading,
+  greeting: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeXl, color: Colors.text },
+  subtitle: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.textSecondary, marginTop: 2 },
+  headerActions: { flexDirection: 'row', gap: Spacing.xs },
+  iconBtn: { padding: Spacing.sm, borderRadius: BorderRadius.md },
+  sosSection: { alignItems: 'center', paddingVertical: Spacing.xxl, gap: Spacing.md },
+  sosHint: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.textTertiary },
+  guestBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    marginHorizontal: Spacing.lg, backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl, padding: Spacing.lg,
+    borderWidth: 1, borderColor: Colors.primaryLight,
   },
-  subtitle: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeMd,
-    color: Colors.textSecondary,
-    marginTop: Spacing.sm,
-    lineHeight: Typography.fontSizeMd * Typography.lineHeightBody,
-  },
-  sosContainer: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xxl,
-  },
-  requestsSection: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  sectionTitle: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeLg,
-    color: Colors.text,
-    marginBottom: Spacing.sm,
-  },
-  requestCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    elevation: 1,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  requestInfo: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
-  requestHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  requestStatus: {
-    fontFamily: 'Inter-Bold',
-    fontSize: Typography.fontSizeMd,
-    color: Colors.text,
-  },
-  requestMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  requestMetaText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeXs,
-    color: Colors.textTertiary,
-  },
-  emptyState: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-  },
-  emptyText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: Typography.fontSizeMd,
-    color: Colors.textTertiary,
-    textAlign: 'center',
-    lineHeight: Typography.fontSizeMd * Typography.lineHeightBody,
-  },
+  guestBannerText: { flex: 1, gap: 4 },
+  guestTitle: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeMd, color: Colors.text },
+  guestDesc: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.textSecondary },
+  section: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
+  sectionTitle: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeLg, color: Colors.text, marginBottom: Spacing.xs },
+  emptyHint: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, alignItems: 'center' },
+  emptyText: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.textTertiary, textAlign: 'center' },
 });
