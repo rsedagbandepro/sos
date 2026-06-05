@@ -8,6 +8,7 @@ import { Avatar } from '@/components/Avatar';
 import { useIntervention } from '@/hooks/useIntervention';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { validateReviewInput, sanitizeText } from '@/lib/validation';
 import { useState } from 'react';
 
 export default function EvaluationScreen() {
@@ -19,9 +20,14 @@ export default function EvaluationScreen() {
   const [commentaire, setCommentaire] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!intervention || !user || score === 0) return;
+    if (!intervention || !user) return;
+    const sanitizedComment = sanitizeText(commentaire, 500);
+    const validationError = validateReviewInput(score, sanitizedComment);
+    if (validationError) { setReviewError(validationError); return; }
+    setReviewError(null);
     setSubmitting(true);
     try {
       await supabase.from('reviews').insert({
@@ -29,7 +35,7 @@ export default function EvaluationScreen() {
         reviewer_id: user.id,
         mechanic_id: intervention.mechanic_id,
         score,
-        commentaire: commentaire || null,
+        commentaire: sanitizeText(commentaire, 500) || null,
       });
       setDone(true);
     } catch {
@@ -105,6 +111,10 @@ export default function EvaluationScreen() {
           <Text style={styles.submitBtnText}>{submitting ? 'Envoi...' : 'Envoyer l\'évaluation'}</Text>
         </Pressable>
 
+        {reviewError && (
+          <Text style={styles.errorText}>{reviewError}</Text>
+        )}
+
         <Pressable style={styles.skipBtn} onPress={() => router.replace('/(driver)')}>
           <Text style={styles.skipBtnText}>Passer</Text>
         </Pressable>
@@ -142,6 +152,7 @@ const styles = StyleSheet.create({
   submitBtnText: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeMd, color: Colors.textInverse },
   skipBtn: { paddingVertical: Spacing.md },
   skipBtnText: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.textTertiary },
+  errorText: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.error, textAlign: 'center' },
   doneTitle: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeXl, color: Colors.text, textAlign: 'center' },
   doneText: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeMd, color: Colors.textSecondary, textAlign: 'center' },
   homeBtn: { backgroundColor: Colors.primary, paddingVertical: Spacing.md + 4, paddingHorizontal: Spacing.xxl, borderRadius: BorderRadius.lg },

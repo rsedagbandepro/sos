@@ -2,11 +2,12 @@ import { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { getServerRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/theme';
 
 export default function IndexScreen() {
-  const { user, profile, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     if (loading) return;
@@ -16,13 +17,14 @@ export default function IndexScreen() {
       return;
     }
 
-    const role = profile?.role ?? 'driver';
+    // Always resolve role from the database — never trust client-side state
+    (async () => {
+      try {
+        const role = await getServerRole(user.id);
 
-    if (role === 'admin') {
-      router.replace('/(admin)');
-    } else if (role === 'mechanic') {
-      (async () => {
-        try {
+        if (role === 'admin') {
+          router.replace('/(admin)');
+        } else if (role === 'mechanic') {
           const { data } = await supabase
             .from('mechanics')
             .select('verification_status')
@@ -34,14 +36,14 @@ export default function IndexScreen() {
           } else {
             router.replace('/(mechanic)/onboarding');
           }
-        } catch {
-          router.replace('/(mechanic)/onboarding');
+        } else {
+          router.replace('/(driver)');
         }
-      })();
-    } else {
-      router.replace('/(driver)');
-    }
-  }, [user, profile, loading]);
+      } catch {
+        router.replace('/(driver)');
+      }
+    })();
+  }, [user, loading]);
 
   return (
     <View style={styles.container}>

@@ -9,6 +9,7 @@ import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useSinglePanne } from '@/hooks/usePannes';
 import { supabase } from '@/lib/supabase';
+import { validateOffreInput, sanitizeText } from '@/lib/validation';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useState, useEffect } from 'react';
 import type { Mechanic, PanneCategorie } from '@/lib/types';
@@ -65,7 +66,11 @@ export default function MechanicPanneDetailScreen() {
 
   const handleSubmit = async () => {
     if (!mechanic || !panneId) return;
-    if (!prix || isNaN(parseFloat(prix))) { setError('Entrez un prix valide'); return; }
+
+    const sanitizedMessage = sanitizeText(message, 300);
+    const validationError = validateOffreInput({ prix, eta, message: sanitizedMessage });
+    if (validationError) { setError(validationError); return; }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -73,15 +78,15 @@ export default function MechanicPanneDetailScreen() {
         panne_id: panneId,
         mechanic_id: mechanic.id,
         prix: parseFloat(prix),
-        eta_minutes: parseInt(eta) || 20,
-        message: message.trim() || null,
+        eta_minutes: parseInt(eta, 10),
+        message: sanitizedMessage || null,
         statut: 'pending',
       });
       if (err) throw err;
       setSuccess(true);
       setAlreadyOffered(true);
-    } catch (e: any) {
-      setError(e.message || 'Erreur');
+    } catch {
+      setError('Erreur lors de l\'envoi. Veuillez réessayer.');
     } finally {
       setSubmitting(false);
     }

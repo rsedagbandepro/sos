@@ -38,9 +38,8 @@ export default function OnboardingIdentiteScreen() {
       }, { onConflict: 'user_id' });
       if (err) throw err;
       router.push('/(mechanic)/onboarding/documents');
-    } catch (e: any) {
-      console.error('Onboarding error:', e);
-      setError(e.message || 'Erreur lors de la sauvegarde');
+    } catch {
+      setError('Erreur lors de la sauvegarde. Veuillez réessayer.');
     } finally {
       setSaving(false);
     }

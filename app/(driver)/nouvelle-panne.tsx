@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useConnectivity } from '@/hooks/useConnectivity';
 import { getCurrentPosition } from '@/lib/location';
 import { supabase } from '@/lib/supabase';
+import { validatePanneInput, sanitizeText } from '@/lib/validation';
 import { useState, useEffect } from 'react';
 import type { PanneCategorie } from '@/lib/types';
 
@@ -55,8 +56,19 @@ export default function NouvellePanneScreen() {
   const canSubmit = !!categorie && !locating && (!isGuest || phone.trim().length >= 8);
 
   const handleSubmit = async () => {
-    if (!categorie) { setError('Sélectionnez un type de panne'); return; }
-    if (isGuest && phone.trim().length < 8) { setError('Entrez votre numéro de téléphone'); return; }
+    const sanitizedDesc = sanitizeText(description, 500);
+    const sanitizedPhone = sanitizeText(phone, 20);
+
+    const validationError = validatePanneInput({
+      categorie,
+      description: sanitizedDesc,
+      phone: isGuest ? sanitizedPhone : undefined,
+      isGuest,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+    });
+    if (validationError) { setError(validationError); return; }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -64,14 +76,15 @@ export default function NouvellePanneScreen() {
         latitude: coords.latitude,
         longitude: coords.longitude,
         categorie,
-        description: description.trim() || null,
+        description: sanitizedDesc || null,
         statut: 'ouverte',
       };
 
       if (isGuest) {
         payload.driver_id = null;
-        payload.driver_phone = phone.trim();
+        payload.driver_phone = sanitizedPhone;
       } else {
+        // driver_id is enforced by RLS to equal auth.uid() — do not accept from client
         payload.driver_id = user!.id;
       }
 
@@ -83,8 +96,8 @@ export default function NouvellePanneScreen() {
 
       if (err) throw err;
       router.replace(`/(driver)/attente/${data.id}`);
-    } catch (e: any) {
-      setError(e.message || 'Erreur lors de l\'envoi');
+    } catch {
+      setError('Erreur lors de l\'envoi. Veuillez réessayer.');
     } finally {
       setSubmitting(false);
     }

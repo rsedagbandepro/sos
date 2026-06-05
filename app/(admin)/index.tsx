@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Users, FileCheck, Wrench, LogOut, ChevronRight } from 'lucide-react-native';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { getServerRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
 
@@ -18,11 +19,28 @@ interface Stats {
 
 export default function AdminIndexScreen() {
   const insets = useSafeAreaInsets();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [stats, setStats] = useState<Stats>({ pendingDossiers: 0, totalMechanics: 0, totalUsers: 0, openPannes: 0 });
   const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
+    if (!user) {
+      router.replace('/(driver)');
+      return;
+    }
+    // Verify admin role from DB before loading any admin data
+    getServerRole(user.id).then(role => {
+      if (role !== 'admin') {
+        router.replace('/(driver)');
+        return;
+      }
+      setAuthorized(true);
+    });
+  }, [user]);
+
+  useEffect(() => {
+    if (!authorized) return;
     Promise.all([
       supabase.from('mechanics').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending'),
       supabase.from('mechanics').select('*', { count: 'exact', head: true }),
@@ -37,7 +55,7 @@ export default function AdminIndexScreen() {
       });
       setLoading(false);
     });
-  }, []);
+  }, [authorized]);
 
   const MENU = [
     {
@@ -63,6 +81,14 @@ export default function AdminIndexScreen() {
       color: Colors.secondary,
     },
   ];
+
+  if (!authorized) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

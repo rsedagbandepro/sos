@@ -18,13 +18,11 @@ export function useIntervention(interventionId: string | null) {
           .eq('id', interventionId)
           .maybeSingle();
 
-        if (fetchError) {
-          console.error('Failed to fetch intervention:', fetchError);
-        } else {
+        if (!fetchError) {
           setIntervention((data || null) as Intervention | null);
         }
-      } catch (err) {
-        console.error('Unexpected error fetching intervention:', err);
+      } catch {
+        // non-critical fetch failure
       } finally {
         setLoading(false);
       }
@@ -99,7 +97,6 @@ export async function updateInterventionStatut(id: string, statut: InterventionS
     .maybeSingle();
 
   if (error) {
-    console.error('Failed to update intervention status:', error);
     throw error;
   }
 
@@ -109,11 +106,9 @@ export async function updateInterventionStatut(id: string, statut: InterventionS
     if (statut === 'terminee') panneStatus = 'terminee';
     if (statut === 'annulee') panneStatus = 'annulee';
 
-    const { error: panneError } = await supabase
+    await supabase
       .from('pannes')
       .update({ statut: panneStatus })
       .eq('id', data.panne_id);
-
-    if (panneError) console.warn('Failed to update panne status:', panneError);
   }
 }

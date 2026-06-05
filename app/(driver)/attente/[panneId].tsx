@@ -59,8 +59,8 @@ export default function AttenteScreen() {
       if (error) throw error;
       await supabase.from('pannes').update({ statut: 'offre_acceptee' }).eq('id', panneId);
       router.replace(`/(driver)/suivi/${intervention.id}`);
-    } catch (e: any) {
-      console.warn(e.message);
+    } catch {
+      // accept flow failed silently; user can retry
     } finally {
       setAccepting(null);
     }

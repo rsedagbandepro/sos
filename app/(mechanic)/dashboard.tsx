@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapPin, Wrench, History, User, Bell } from 'lucide-react-native';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { getServerRole } from '@/lib/auth';
 import { useNearbyOpenPannes } from '@/hooks/usePannes';
 import { supabase } from '@/lib/supabase';
 import { getCurrentPosition } from '@/lib/location';
@@ -30,6 +31,14 @@ export default function MechanicDashboardScreen() {
 
   const loadMechanic = useCallback(async () => {
     if (!user) return;
+
+    // Verify mechanic role from DB before loading dashboard data
+    const role = await getServerRole(user.id);
+    if (role !== 'mechanic') {
+      router.replace('/(driver)');
+      return;
+    }
+
     const { data } = await supabase
       .from('mechanics')
       .select('*')

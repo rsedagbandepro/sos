@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
-import type { Profile, UserRole } from '@/lib/types';
+import type { Profile } from '@/lib/types';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -46,10 +46,12 @@ export function useAuth() {
     return data;
   }, []);
 
+  // Le rôle n'est PAS accepté en paramètre — le trigger serveur (SECURITY DEFINER)
+  // assigne toujours 'driver' à l'inscription. La promotion de rôle se fait
+  // uniquement via set_role_in_app_metadata() côté admin.
   const signUp = useCallback(async (
     email: string,
     password: string,
-    role: UserRole = 'driver',
     fullName?: string,
     phone?: string,
   ) => {
@@ -57,7 +59,7 @@ export function useAuth() {
       email,
       password,
       options: {
-        data: { role, full_name: fullName ?? null, phone: phone ?? null },
+        data: { full_name: fullName ?? null, phone: phone ?? null },
       },
     });
     if (error) throw error;
@@ -69,7 +71,7 @@ export function useAuth() {
     if (error) throw error;
   }, []);
 
-  const role: UserRole = profile?.role ?? 'driver';
-
-  return { user, session, profile, role, loading, signIn, signUp, signOut, fetchProfile };
+  // Le rôle n'est pas exposé ici. Pour les décisions d'accès, utiliser
+  // getServerRole() depuis lib/auth.ts qui lit app_metadata depuis le JWT.
+  return { user, session, profile, loading, signIn, signUp, signOut, fetchProfile };
 }

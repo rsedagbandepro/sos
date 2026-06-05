@@ -5,15 +5,13 @@ import {
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mail, Lock, User, Phone, ArrowLeft, Siren, Wrench, ArrowRight } from 'lucide-react-native';
+import { Mail, Lock, User, Phone, ArrowLeft, ArrowRight } from 'lucide-react-native';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import type { UserRole } from '@/lib/types';
 
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
   const { signUp } = useAuth();
-  const [role, setRole] = useState<UserRole>('driver');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -27,10 +25,10 @@ export default function SignupScreen() {
     setLoading(true);
     setError(null);
     try {
-      await signUp(email, password, role, fullName, phone || undefined);
-      // Root layout will redirect after session loads
-    } catch (e: any) {
-      setError(e.message || 'Impossible de créer le compte');
+      await signUp(email, password, fullName, phone || undefined);
+      // Le root layout redirige après chargement de la session
+    } catch {
+      setError('Impossible de créer le compte. Vérifiez vos informations.');
     } finally {
       setLoading(false);
     }
@@ -47,22 +45,6 @@ export default function SignupScreen() {
 
       <ScrollView contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
-        <Text style={styles.sectionLabel}>Je suis un(e)</Text>
-        <View style={styles.roleRow}>
-          <Pressable style={[styles.roleCard, role === 'driver' && styles.roleCardActive]}
-            onPress={() => setRole('driver')}>
-            <Siren size={28} color={role === 'driver' ? Colors.textInverse : Colors.primary} />
-            <Text style={[styles.roleLabel, role === 'driver' && styles.roleLabelActive]}>Conducteur</Text>
-            <Text style={[styles.roleDesc, role === 'driver' && styles.roleDescActive]}>Je signale une panne</Text>
-          </Pressable>
-          <Pressable style={[styles.roleCard, role === 'mechanic' && styles.roleCardActiveMec]}
-            onPress={() => setRole('mechanic')}>
-            <Wrench size={28} color={role === 'mechanic' ? Colors.textInverse : Colors.secondary} />
-            <Text style={[styles.roleLabel, role === 'mechanic' && styles.roleLabelActive]}>Mécanicien</Text>
-            <Text style={[styles.roleDesc, role === 'mechanic' && styles.roleDescActive]}>Je répare des pannes</Text>
-          </Pressable>
-        </View>
 
         <View style={styles.form}>
           {error && <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>}
@@ -125,20 +107,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: Spacing.sm },
   topTitle: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeLg, color: Colors.text },
-  content: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl, gap: Spacing.lg },
-  sectionLabel: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeLg, color: Colors.text },
-  roleRow: { flexDirection: 'row', gap: Spacing.md },
-  roleCard: {
-    flex: 1, padding: Spacing.lg, borderRadius: BorderRadius.xl,
-    borderWidth: 2, borderColor: Colors.border, backgroundColor: Colors.surface,
-    alignItems: 'center', gap: Spacing.sm,
-  },
-  roleCardActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  roleCardActiveMec: { backgroundColor: Colors.secondary, borderColor: Colors.secondary },
-  roleLabel: { fontFamily: 'Inter-Bold', fontSize: Typography.fontSizeMd, color: Colors.text },
-  roleLabelActive: { color: Colors.textInverse },
-  roleDesc: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeXs, color: Colors.textSecondary, textAlign: 'center' },
-  roleDescActive: { color: Colors.textInverse + 'cc' },
+  content: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl, paddingTop: Spacing.lg, gap: Spacing.lg },
   form: { gap: Spacing.lg },
   errorBox: { backgroundColor: Colors.errorLight, padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.error },
   errorText: { fontFamily: 'Inter-Regular', fontSize: Typography.fontSizeSm, color: Colors.error },
