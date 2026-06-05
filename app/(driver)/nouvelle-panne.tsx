@@ -40,10 +40,16 @@ export default function NouvellePanneScreen() {
   const isGuest = !user;
 
   useEffect(() => {
-    getCurrentPosition().then(pos => {
-      setCoords(pos);
-      setLocating(false);
-    }).catch(() => setLocating(false));
+    getCurrentPosition()
+      .then(pos => {
+        setCoords(pos);
+      })
+      .catch(err => {
+        console.warn('Failed to get position:', err);
+      })
+      .finally(() => {
+        setLocating(false);
+      });
   }, []);
 
   const canSubmit = !!categorie && !locating && (!isGuest || phone.trim().length >= 8);

@@ -9,15 +9,28 @@ export function useIntervention(interventionId: string | null) {
 
   useEffect(() => {
     if (!interventionId) { setLoading(false); return; }
-    supabase
-      .from('interventions')
-      .select('*, mechanic:mechanics(*), panne:pannes(*), paiement:paiements(*)')
-      .eq('id', interventionId)
-      .maybeSingle()
-      .then(({ data }) => {
-        setIntervention(data as Intervention | null);
+
+    const loadIntervention = async () => {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('interventions')
+          .select('*, mechanic:mechanics(*), panne:pannes(*), paiement:paiements(*)')
+          .eq('id', interventionId)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error('Failed to fetch intervention:', fetchError);
+        } else {
+          setIntervention((data || null) as Intervention | null);
+        }
+      } catch (err) {
+        console.error('Unexpected error fetching intervention:', err);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    loadIntervention();
 
     const ch = supabase
       .channel(`intervention:${interventionId}`)
@@ -79,5 +92,8 @@ export async function updateInterventionStatut(id: string, statut: InterventionS
   if (statut === 'terminee') update.completed_at = new Date().toISOString();
 
   const { error } = await supabase.from('interventions').update(update).eq('id', id);
-  if (error) throw error;
+  if (error) {
+    console.error('Failed to update intervention status:', error);
+    throw error;
+  }
 }

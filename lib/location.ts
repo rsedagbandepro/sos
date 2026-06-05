@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { DEFAULT_LOCATION } from '@/constants/breakdownTypes';
 
 export interface Coordinates {
@@ -9,15 +10,24 @@ export interface Coordinates {
 let lastKnownPosition: Coordinates | null = null;
 
 export async function requestLocationPermission(): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    return false;
+  }
+
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     return status === 'granted';
-  } catch {
+  } catch (error) {
+    console.warn('Failed to request location permission:', error);
     return false;
   }
 }
 
 export async function getCurrentPosition(): Promise<Coordinates> {
+  if (Platform.OS === 'web') {
+    return DEFAULT_LOCATION;
+  }
+
   try {
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
@@ -35,7 +45,8 @@ export async function getCurrentPosition(): Promise<Coordinates> {
 
     lastKnownPosition = coords;
     return coords;
-  } catch {
+  } catch (error) {
+    console.warn('Failed to get current position:', error);
     return lastKnownPosition || DEFAULT_LOCATION;
   }
 }
@@ -43,6 +54,10 @@ export async function getCurrentPosition(): Promise<Coordinates> {
 export async function watchPosition(
   callback: (coords: Coordinates) => void
 ): Promise<Location.LocationSubscription | null> {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
   try {
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) return null;
@@ -62,7 +77,8 @@ export async function watchPosition(
         callback(coords);
       }
     );
-  } catch {
+  } catch (error) {
+    console.warn('Failed to watch position:', error);
     return null;
   }
 }

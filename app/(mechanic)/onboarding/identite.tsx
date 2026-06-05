@@ -21,12 +21,11 @@ export default function OnboardingIdentiteScreen() {
 
   const handleNext = async () => {
     if (!phone) { setError('Le téléphone est obligatoire'); return; }
-    if (!user) return;
+    if (!user) { setError('Utilisateur non authentifié'); return; }
     setSaving(true);
     setError(null);
     try {
       const coords = await getCurrentPosition();
-      // Upsert mechanic profile
       const { error: err } = await supabase.from('mechanics').upsert({
         user_id: user.id,
         business_name: businessName || null,
@@ -40,7 +39,8 @@ export default function OnboardingIdentiteScreen() {
       if (err) throw err;
       router.push('/(mechanic)/onboarding/documents');
     } catch (e: any) {
-      setError(e.message || 'Erreur');
+      console.error('Onboarding error:', e);
+      setError(e.message || 'Erreur lors de la sauvegarde');
     } finally {
       setSaving(false);
     }
