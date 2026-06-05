@@ -23,7 +23,7 @@ export default function LoginScreen() {
     setError(null);
     try {
       await signIn(email, password);
-      // Root layout redirects based on role
+      router.replace('/');
     } catch (e: any) {
       setError(e.message || 'Identifiants incorrects');
     } finally {

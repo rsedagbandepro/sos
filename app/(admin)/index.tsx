@@ -29,14 +29,17 @@ export default function AdminIndexScreen() {
       router.replace('/(driver)');
       return;
     }
-    // Verify admin role from DB before loading any admin data
-    getServerRole(user.id).then(role => {
+    let cancelled = false;
+    (async () => {
+      const role = await getServerRole(user.id);
+      if (cancelled) return;
       if (role !== 'admin') {
         router.replace('/(driver)');
         return;
       }
       setAuthorized(true);
-    });
+    })();
+    return () => { cancelled = true; };
   }, [user]);
 
   useEffect(() => {

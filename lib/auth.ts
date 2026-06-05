@@ -25,6 +25,18 @@ export async function getServerRole(userId: string): Promise<UserRole | null> {
   const refreshedRole = refreshed.session.user.app_metadata?.role as UserRole | undefined;
   if (refreshedRole && VALID_ROLES.includes(refreshedRole)) return refreshedRole;
 
+  // JWT may lack role metadata entirely (e.g. right after first login before
+  // the trigger syncs). Fall back to the profiles table as last resort.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (profile?.role && VALID_ROLES.includes(profile.role as UserRole)) {
+    return profile.role as UserRole;
+  }
+
   return null;
 }
 

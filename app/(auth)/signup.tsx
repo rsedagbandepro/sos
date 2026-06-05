@@ -26,7 +26,7 @@ export default function SignupScreen() {
     setError(null);
     try {
       await signUp(email, password, fullName, phone || undefined);
-      // Le root layout redirige après chargement de la session
+      router.replace('/');
     } catch {
       setError('Impossible de créer le compte. Vérifiez vos informations.');
     } finally {

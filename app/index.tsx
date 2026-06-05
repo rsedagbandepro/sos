@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,19 +8,24 @@ import { Colors } from '@/constants/theme';
 
 export default function IndexScreen() {
   const { user, loading } = useAuth();
+  const [resolvingRole, setResolvingRole] = useState(true);
 
   useEffect(() => {
     if (loading) return;
 
     if (!user) {
+      setResolvingRole(false);
       router.replace('/(driver)');
       return;
     }
 
-    // Always resolve role from the database — never trust client-side state
+    setResolvingRole(true);
+    let cancelled = false;
+
     (async () => {
       try {
         const role = await getServerRole(user.id);
+        if (cancelled) return;
 
         if (role === 'admin') {
           router.replace('/(admin)');
@@ -40,10 +45,16 @@ export default function IndexScreen() {
           router.replace('/(driver)');
         }
       } catch {
-        router.replace('/(driver)');
+        if (!cancelled) router.replace('/(driver)');
+      } finally {
+        if (!cancelled) setResolvingRole(false);
       }
     })();
+
+    return () => { cancelled = true; };
   }, [user, loading]);
+
+  if (!resolvingRole && !loading && !user) return null;
 
   return (
     <View style={styles.container}>

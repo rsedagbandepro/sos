@@ -35,6 +35,8 @@ export default function MechanicDashboardScreen() {
     // Verify mechanic role from DB before loading dashboard data
     const role = await getServerRole(user.id);
     if (role !== 'mechanic') {
+      // getServerRole now falls back to profiles table, so a null role
+      // genuinely means this user is not a mechanic
       router.replace('/(driver)');
       return;
     }
