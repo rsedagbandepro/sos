@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Intervention, InterventionStatut } from '@/lib/types';
+import type { Intervention, InterventionStatut, PanneStatut } from '@/lib/types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export function useIntervention(interventionId: string | null) {
@@ -91,9 +91,29 @@ export async function updateInterventionStatut(id: string, statut: InterventionS
   if (statut === 'arrivee') update.arrived_at = new Date().toISOString();
   if (statut === 'terminee') update.completed_at = new Date().toISOString();
 
-  const { error } = await supabase.from('interventions').update(update).eq('id', id);
+  const { error, data } = await supabase
+    .from('interventions')
+    .update(update)
+    .eq('id', id)
+    .select('panne_id')
+    .maybeSingle();
+
   if (error) {
     console.error('Failed to update intervention status:', error);
     throw error;
+  }
+
+  if (data?.panne_id) {
+    let panneStatus: PanneStatut = 'ouverte';
+    if (statut === 'acceptee') panneStatus = 'offre_acceptee';
+    if (statut === 'terminee') panneStatus = 'terminee';
+    if (statut === 'annulee') panneStatus = 'annulee';
+
+    const { error: panneError } = await supabase
+      .from('pannes')
+      .update({ statut: panneStatus })
+      .eq('id', data.panne_id);
+
+    if (panneError) console.warn('Failed to update panne status:', panneError);
   }
 }

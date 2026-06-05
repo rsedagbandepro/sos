@@ -55,6 +55,7 @@ export interface Mechanic {
 export interface Panne {
   id: string;
   driver_id: string | null;
+  driver_phone: string | null;
   latitude: number;
   longitude: number;
   categorie: PanneCategorie;

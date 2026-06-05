@@ -47,13 +47,16 @@ export default function MechanicDashboardScreen() {
     setMechanic(data as Mechanic);
     setLoadingMechanic(false);
 
-    // Update GPS silently
+    // Update GPS silently (only on native platforms)
     try {
       const coords = await getCurrentPosition();
-      await supabase.from('mechanics').update({
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-      }).eq('id', data.id);
+      // Only update if result is not the default fallback location
+      if (coords.latitude !== 6.3654 || coords.longitude !== 2.4183) {
+        await supabase.from('mechanics').update({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }).eq('id', data.id);
+      }
     } catch {
       // non-critical
     }

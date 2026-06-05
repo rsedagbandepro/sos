@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/theme';
 
 export default function IndexScreen() {
@@ -11,7 +12,6 @@ export default function IndexScreen() {
     if (loading) return;
 
     if (!user) {
-      // Unauthenticated users go directly to the driver home as guests
       router.replace('/(driver)');
       return;
     }
@@ -21,7 +21,23 @@ export default function IndexScreen() {
     if (role === 'admin') {
       router.replace('/(admin)');
     } else if (role === 'mechanic') {
-      router.replace('/(mechanic)/onboarding');
+      (async () => {
+        try {
+          const { data } = await supabase
+            .from('mechanics')
+            .select('verification_status')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (data?.verification_status === 'approved') {
+            router.replace('/(mechanic)/dashboard');
+          } else {
+            router.replace('/(mechanic)/onboarding');
+          }
+        } catch {
+          router.replace('/(mechanic)/onboarding');
+        }
+      })();
     } else {
       router.replace('/(driver)');
     }

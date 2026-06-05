@@ -26,13 +26,13 @@ export function useDriverPannes(driverId: string | null) {
       .channel(`driver_pannes:${driverId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pannes', filter: `driver_id=eq.${driverId}` },
         (payload: RealtimePostgresChangesPayload<Panne>) => {
-          if (payload.eventType === 'INSERT') setPannes(prev => [payload.new as Panne, ...prev]);
+          if (payload.eventType === 'INSERT') fetch();
           else if (payload.eventType === 'UPDATE') setPannes(prev => prev.map(p => p.id === (payload.new as Panne).id ? (payload.new as Panne) : p));
           else if (payload.eventType === 'DELETE') setPannes(prev => prev.filter(p => p.id !== (payload.old as Panne).id));
         })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [driverId]);
+  }, [driverId, fetch]);
 
   return { pannes, loading, refetch: fetch };
 }

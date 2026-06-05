@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Clock, MapPin, Phone } from 'lucide-react-native';
@@ -25,19 +25,25 @@ export default function AttenteScreen() {
 
   const handleAccept = async (offre: Offre) => {
     if (!panne?.driver_id) {
-      // Guest panne case - cannot create intervention without driver account
-      alert('Créez un compte pour accepter une offre. Veuillez vous inscrire d\'abord.');
-      router.push('/(auth)/signup');
+      Alert.alert(
+        'Créer un compte',
+        'Pour accepter une offre et suivre votre intervention, vous devez créer un compte. Cela prend moins d\'une minute.',
+        [
+          { text: 'Annuler', onPress: () => {}, style: 'cancel' },
+          {
+            text: 'Créer un compte',
+            onPress: () => router.push(`/(auth)/signup?panneId=${panneId}`),
+            style: 'default',
+          },
+        ]
+      );
       return;
     }
     setAccepting(offre.id);
     try {
-      // Accept the offre
       await supabase.from('offres').update({ statut: 'accepted' }).eq('id', offre.id);
-      // Reject other pending offres
       await supabase.from('offres').update({ statut: 'rejected' })
         .eq('panne_id', panneId).neq('id', offre.id);
-      // Create intervention
       const { data: intervention, error } = await supabase
         .from('interventions')
         .insert({
@@ -51,7 +57,6 @@ export default function AttenteScreen() {
         .select()
         .single();
       if (error) throw error;
-      // Update panne statut
       await supabase.from('pannes').update({ statut: 'offre_acceptee' }).eq('id', panneId);
       router.replace(`/(driver)/suivi/${intervention.id}`);
     } catch (e: any) {
