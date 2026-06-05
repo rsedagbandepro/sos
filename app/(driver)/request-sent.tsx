@@ -4,6 +4,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Pressable,
+  Linking,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
@@ -11,20 +12,10 @@ import { useBreakdownRequest } from '@/hooks/useBreakdownRequest';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { useConnectivity } from '@/hooks/useConnectivity';
-import {
-  Clock,
-  MapPin,
-  Phone,
-  Star,
-  Wrench,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Navigation,
-} from 'lucide-react-native';
+import { Clock, MapPin, Phone, Star, Wrench, CircleCheck as CheckCircle, Circle as XCircle, CircleAlert as AlertCircle, Navigation } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Mechanic } from '@/lib/types';
 
 const STATUS_CONFIG: Record<
@@ -60,7 +51,8 @@ export default function RequestSentScreen() {
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
 
   // Fetch mechanic details when accepted
-  if (request?.accepted_by && !mechanic) {
+  useEffect(() => {
+    if (!request?.accepted_by) return;
     supabase
       .from('mechanics')
       .select('*')
@@ -69,7 +61,7 @@ export default function RequestSentScreen() {
       .then(({ data }) => {
         if (data) setMechanic(data as Mechanic);
       });
-  }
+  }, [request?.accepted_by]);
 
   const handleSubmitRating = async () => {
     if (!request || !mechanic || rating === 0) return;
@@ -183,7 +175,7 @@ export default function RequestSentScreen() {
             {request.status === 'accepted' || request.status === 'in_progress' ? (
               <Pressable
                 style={styles.callButton}
-                onPress={() => {}}
+                onPress={() => Linking.openURL('tel:' + mechanic.phone)}
                 accessibilityLabel="Appeler le mécanicien"
               >
                 <Phone size={18} color={Colors.textInverse} />

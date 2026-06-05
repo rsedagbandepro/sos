@@ -21,7 +21,7 @@ import {
   Check,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DEFAULT_LOCATION } from '@/constants/breakdownTypes';
 
 const SPECIALIZATIONS = [
@@ -43,7 +43,7 @@ export default function MechanicRegisterScreen() {
   const [loading, setLoading] = useState(true);
 
   // Check if mechanic profile already exists
-  useState(() => {
+  useEffect(() => {
     if (user) {
       supabase
         .from('mechanics')
@@ -60,7 +60,7 @@ export default function MechanicRegisterScreen() {
     } else {
       setLoading(false);
     }
-  });
+  }, [user]);
 
   const toggleSpec = (key: string) => {
     setSelectedSpecs((prev) =>

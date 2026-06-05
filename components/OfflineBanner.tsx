@@ -40,7 +40,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
   },
   text: {
-    ...Typography,
     fontFamily: 'Inter-Regular',
     fontSize: Typography.fontSizeSm,
     color: Colors.textInverse,

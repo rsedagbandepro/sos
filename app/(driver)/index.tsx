@@ -4,7 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ViewStyle,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SOSButton } from '@/components/SOSButton';
@@ -86,7 +85,7 @@ export default function DriverHome() {
             {activeRequests.map((req: BreakdownRequest) => (
               <Pressable
                 key={req.id}
-                style={styles.requestCard as any}
+                style={styles.requestCard}
                 onPress={() => handleRequestPress(req.id)}
               >
                 <View style={styles.requestInfo}>

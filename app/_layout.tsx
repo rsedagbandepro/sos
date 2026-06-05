@@ -8,11 +8,13 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
+import { useOfflineProcessor } from '@/hooks/useOfflineProcessor';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   useFrameworkReady();
+  useOfflineProcessor();
 
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': Inter_400Regular,

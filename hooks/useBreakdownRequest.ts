@@ -76,6 +76,11 @@ export function useDriverRequests(driverPhone: string) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!driverPhone) {
+      setLoading(false);
+      return;
+    }
+
     const fetchRequests = async () => {
       try {
         const { data } = await supabase
@@ -92,6 +97,56 @@ export function useDriverRequests(driverPhone: string) {
       }
     };
     fetchRequests();
+  }, [driverPhone]);
+
+  // Realtime subscription for status updates on driver's requests
+  useEffect(() => {
+    if (!driverPhone) return;
+
+    const channel = supabase
+      .channel(`driver_requests:${driverPhone}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'breakdown_requests',
+          filter: `driver_phone=eq.${driverPhone}`,
+        },
+        (payload: RealtimePostgresChangesPayload<BreakdownRequest>) => {
+          if (payload.new) {
+            setRequests((prev) =>
+              prev.map((r) =>
+                r.id === (payload.new as BreakdownRequest).id
+                  ? (payload.new as BreakdownRequest)
+                  : r
+              )
+            );
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'breakdown_requests',
+          filter: `driver_phone=eq.${driverPhone}`,
+        },
+        (payload: RealtimePostgresChangesPayload<BreakdownRequest>) => {
+          if (payload.new) {
+            setRequests((prev) => [
+              payload.new as BreakdownRequest,
+              ...prev,
+            ]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [driverPhone]);
 
   return { requests, loading };

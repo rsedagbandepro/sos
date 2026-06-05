@@ -11,23 +11,10 @@ import { router } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { getCurrentPosition } from '@/lib/location';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { useConnectivity } from '@/hooks/useConnectivity';
-import {
-  MapPin,
-  Clock,
-  Phone,
-  Wrench,
-  Battery,
-  CircleDot,
-  Truck,
-  KeyRound,
-  HelpCircle,
-  CheckCircle,
-  XCircle,
-  Navigation,
-  Eye,
-} from 'lucide-react-native';
+import { MapPin, Clock, Phone, Wrench, Battery, CircleDot, Truck, KeyRound, Circle as HelpCircle, CircleCheck as CheckCircle, Circle as XCircle, Navigation, Eye, History, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { BreakdownRequest, BreakdownType, Mechanic } from '@/lib/types';
@@ -82,12 +69,23 @@ export default function MechanicDashboardScreen() {
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!data) {
           router.replace('/(mechanic)/register');
           return;
         }
         setMechanic(data as Mechanic);
+
+        // Refresh mechanic location on dashboard load
+        try {
+          const coords = await getCurrentPosition();
+          await supabase
+            .from('mechanics')
+            .update({ latitude: coords.latitude, longitude: coords.longitude })
+            .eq('id', data.id);
+        } catch {
+          // Location update is non-critical
+        }
       });
   }, [user]);
 
@@ -199,18 +197,28 @@ export default function MechanicDashboardScreen() {
 
       <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
         <Text style={styles.title}>Demandes</Text>
-        <View style={styles.availabilityRow}>
-          <View
-            style={[
-              styles.availabilityDot,
-              mechanic?.is_available
-                ? styles.availableDot
-                : styles.unavailableDot,
-            ]}
-          />
-          <Text style={styles.availabilityText}>
-            {mechanic?.is_available ? 'Disponible' : 'Indisponible'}
-          </Text>
+        <View style={styles.headerActions}>
+          <View style={styles.availabilityRow}>
+            <View
+              style={[
+                styles.availabilityDot,
+                mechanic?.is_available
+                  ? styles.availableDot
+                  : styles.unavailableDot,
+              ]}
+            />
+            <Text style={styles.availabilityText}>
+              {mechanic?.is_available ? 'Disponible' : 'Indisponible'}
+            </Text>
+          </View>
+          <View style={styles.headerNav}>
+            <Pressable onPress={() => router.push('/(mechanic)/history')} style={styles.navButton}>
+              <History size={22} color={Colors.textSecondary} />
+            </Pressable>
+            <Pressable onPress={() => router.push('/(mechanic)/profile')} style={styles.navButton}>
+              <User size={22} color={Colors.textSecondary} />
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -340,6 +348,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontSize: Typography.fontSizeXxl,
     color: Colors.text,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  headerNav: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  navButton: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
   },
   availabilityRow: {
     flexDirection: 'row',
