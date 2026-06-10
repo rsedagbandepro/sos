@@ -46,20 +46,24 @@ export function useAuth() {
     return data;
   }, []);
 
-  // Le rôle n'est PAS accepté en paramètre — le trigger serveur (SECURITY DEFINER)
-  // assigne toujours 'driver' à l'inscription. La promotion de rôle se fait
-  // uniquement via set_role_in_app_metadata() côté admin.
+  // Role is passed as parameter - the server trigger reads it from raw_user_meta_data
+  // For 'mechanic' role, is_approved is set to false and requires admin validation
   const signUp = useCallback(async (
     email: string,
     password: string,
     fullName?: string,
     phone?: string,
+    role?: 'driver' | 'mechanic',
   ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName ?? null, phone: phone ?? null },
+        data: {
+          full_name: fullName ?? null,
+          phone: phone ?? null,
+          role: role ?? 'driver',
+        },
       },
     });
     if (error) throw error;

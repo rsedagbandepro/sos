@@ -25,17 +25,21 @@ const SPECIALISATIONS_LABELS: Record<string, string> = {
 
 export default function MechanicProfilScreen() {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth();
   const [mechanic, setMechanic] = useState<Mechanic | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     const { data } = await supabase.from('mechanics').select('*').eq('user_id', user.id).maybeSingle();
     if (data) setMechanic(data as Mechanic);
     setLoading(false);
-  }, [user]);
+  }, [user, authLoading]);
 
   useEffect(() => { load(); }, [load]);
 

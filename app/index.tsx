@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/theme';
 
 export default function IndexScreen() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const [resolvingRole, setResolvingRole] = useState(true);
 
   useEffect(() => {
@@ -30,6 +30,20 @@ export default function IndexScreen() {
         if (role === 'admin') {
           router.replace('/(admin)');
         } else if (role === 'mechanic') {
+          // Check if mechanic account is approved
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('is_approved')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          // If not approved, show waiting screen
+          if (profileData && profileData.is_approved === false) {
+            router.replace('/(auth)/en-attente');
+            return;
+          }
+
+          // Check mechanics table for verification status
           const { data } = await supabase
             .from('mechanics')
             .select('verification_status')

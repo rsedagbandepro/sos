@@ -30,16 +30,16 @@ const STATUT_LABELS: Record<InterventionStatut, string> = {
 
 export default function MechanicInterventionsScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [mechanicId, setMechanicId] = useState<string | null>(null);
   const { interventions, loading, refetch } = useMechanicInterventions(mechanicId);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (authLoading || !user) return;
     supabase.from('mechanics').select('id').eq('user_id', user.id).maybeSingle()
       .then(({ data }) => { if (data) setMechanicId(data.id); });
-  }, [user]);
+  }, [user, authLoading]);
 
   const handleNext = async (intervention: Intervention) => {
     const transition = STATUT_NEXT[intervention.statut];

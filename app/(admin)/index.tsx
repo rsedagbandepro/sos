@@ -3,7 +3,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Users, FileCheck, Wrench, LogOut, ChevronRight } from 'lucide-react-native';
+import { Users, FileCheck, Wrench, LogOut, ChevronRight, UserPlus } from 'lucide-react-native';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { getServerRole } from '@/lib/auth';
@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react';
 
 interface Stats {
   pendingDossiers: number;
+  pendingMechanics: number;
   totalMechanics: number;
   totalUsers: number;
   openPannes: number;
@@ -19,12 +20,15 @@ interface Stats {
 
 export default function AdminIndexScreen() {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuth();
-  const [stats, setStats] = useState<Stats>({ pendingDossiers: 0, totalMechanics: 0, totalUsers: 0, openPannes: 0 });
+  const { user, signOut, loading: authLoading } = useAuth();
+  const [stats, setStats] = useState<Stats>({ pendingDossiers: 0, pendingMechanics: 0, totalMechanics: 0, totalUsers: 0, openPannes: 0 });
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
+    // Wait for auth to finish loading before checking user
+    if (authLoading) return;
+
     if (!user) {
       router.replace('/(driver)');
       return;
@@ -40,18 +44,20 @@ export default function AdminIndexScreen() {
       setAuthorized(true);
     })();
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, authLoading]);
 
   useEffect(() => {
     if (!authorized) return;
     Promise.all([
       supabase.from('mechanics').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending'),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'mechanic').eq('is_approved', false),
       supabase.from('mechanics').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('pannes').select('*', { count: 'exact', head: true }).eq('statut', 'ouverte'),
-    ]).then(([pending, mechs, users, pannes]) => {
+    ]).then(([pending, pendingMechs, mechs, users, pannes]) => {
       setStats({
         pendingDossiers: pending.count ?? 0,
+        pendingMechanics: pendingMechs.count ?? 0,
         totalMechanics: mechs.count ?? 0,
         totalUsers: users.count ?? 0,
         openPannes: pannes.count ?? 0,
@@ -62,8 +68,16 @@ export default function AdminIndexScreen() {
 
   const MENU = [
     {
+      icon: UserPlus,
+      label: 'Demandes mecaniciens',
+      desc: stats.pendingMechanics > 0 ? `${stats.pendingMechanics} en attente` : 'Aucune demande',
+      badge: stats.pendingMechanics,
+      route: '/(admin)/demandes',
+      color: stats.pendingMechanics > 0 ? Colors.error : Colors.textTertiary,
+    },
+    {
       icon: FileCheck,
-      label: 'Dossiers mécaniciens',
+      label: 'Dossiers mecaniciens',
       desc: `${stats.pendingDossiers} en attente`,
       badge: stats.pendingDossiers,
       route: '/(admin)/dossiers',

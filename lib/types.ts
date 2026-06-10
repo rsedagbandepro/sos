@@ -24,6 +24,11 @@ export interface Profile {
   full_name: string | null;
   phone: string | null;
   avatar_url: string | null;
+  email?: string;
+  is_active?: boolean;
+  is_approved?: boolean;
+  rejection_reason?: string | null;
+  banned_until?: string | null;
   created_at: string;
   updated_at: string;
 }
